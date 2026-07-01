@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Triumph Tracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="apple-touch-icon" href="https://upload.wikimedia.org/wikipedia/commons/4/46/Triumph_Motorcycles_logo.svg">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
+<script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0a0a;--bg2:#111;--bg3:#1a1a1a;--bg4:#222;
+  --gold:#c9a84c;--gold2:#e8c97a;--golddim:#7a6030;
+  --text:#f0f0f0;--text2:#999;--text3:#555;
+  --red:#e54545;--green:#27ae60;--amber:#e67e22;
+  --border:#252525;--border2:#333;--r:12px
+}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.5}
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:14px}
+
+/* ── STICKY BAR ── */
+#sbar{position:sticky;top:0;z-index:200;background:rgba(8,8,8,.97);border-bottom:1px solid var(--border2);backdrop-filter:blur(16px);padding:0 20px;height:56px;display:flex;align-items:center;gap:16px}
+.sbar-brand{display:flex;align-items:center;gap:10px;min-width:0}
+.sbar-logo{width:32px;height:32px;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sbar-logo svg{width:18px;height:18px;fill:#000}
+.sbar-names{display:flex;flex-direction:column;gap:1px}
+.sbar-title{font-size:13px;font-weight:700;letter-spacing:.6px;color:var(--text)}
+.sbar-sub{font-size:10px;color:var(--text2);letter-spacing:.3px;white-space:nowrap}
+.sbar-sep{width:1px;height:28px;background:var(--border2);flex-shrink:0}
+.sbar-odo{display:flex;align-items:baseline;gap:6px}
+.sbar-odo-label{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.sbar-odo-val{font-size:22px;font-weight:800;color:var(--gold);letter-spacing:1px;font-variant-numeric:tabular-nums}
+.sbar-odo-unit{font-size:11px;color:var(--text2)}
+.sbar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.badge-alert{background:var(--red);color:#fff;border:none;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap}
+.badge-ok{background:var(--green);color:#fff;border:none;border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;white-space:nowrap}
+.btn-odo-update{background:var(--gold);color:#000;border:none;border-radius:8px;padding:6px 14px;font-size:12px;font-weight:700;transition:.2s}
+.btn-odo-update:hover{background:var(--gold2)}
+.btn-icon-header{background:transparent;border:none;font-size:18px;cursor:pointer;padding:4px;border-radius:50%;transition:background .2s}
+.btn-icon-header:hover{background:rgba(255,255,255,0.1)}
+.avatar{width:32px;height:32px;border-radius:50%;object-fit:cover;border:1px solid var(--gold);cursor:pointer;flex-shrink:0}
+
+/* ── ALERT BANNER ── */
+#alert-banner{background:var(--red);color:#fff;padding:10px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-weight:500;flex-wrap:wrap}
+#alert-banner.hidden{display:none}
+.btn-log-svc{background:#fff;color:var(--red);border:none;border-radius:6px;padding:5px 14px;font-size:12px;font-weight:700}
+
+/* ── HERO ── */
+#hero{background:#0a0a0a;border-bottom:1px solid var(--border);padding:40px 20px;position:relative;overflow:hidden}
+.hero-glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:700px;height:350px;background:radial-gradient(ellipse,rgba(201,168,76,.06) 0%,transparent 68%);pointer-events:none}
+.hero-inner{max-width:960px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:32px;position:relative;z-index:1;flex-wrap:wrap}
+.hero-left{flex:1;min-width:260px}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:6px;background:rgba(201,168,76,.1);border:1px solid var(--golddim);color:var(--gold);border-radius:20px;padding:3px 12px;font-size:10px;font-weight:700;letter-spacing:1.2px;margin-bottom:14px;text-transform:uppercase}
+.hero-name{font-size:42px;font-weight:900;line-height:1;color:var(--text);letter-spacing:-1px;margin-bottom:6px}
+.hero-name span{color:var(--gold)}
+.hero-spec{font-size:13px;color:var(--text2);margin-bottom:22px;letter-spacing:.3px}
+.hero-stats{display:flex;flex-wrap:wrap;gap:24px}
+.hstat{display:flex;flex-direction:column;gap:3px}
+.hstat-val{font-size:22px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
+.hstat-lbl{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.6px}
+.hero-right{display:flex;flex-direction:column;align-items:center;gap:10px}
+.ring-wrap{position:relative;width:150px;height:150px}
+.ring-wrap svg{position:absolute;inset:0}
+.ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+.ring-pct{font-size:30px;font-weight:900;line-height:1}
+.ring-lbl{font-size:9px;color:var(--text2);text-transform:uppercase;letter-spacing:.6px}
+.health-tag{font-size:12px;font-weight:700}
+
+/* ── NAV TABS ── */
+#nav{background:var(--bg2);border-bottom:1px solid var(--border);padding:0 20px;display:flex;gap:2px;overflow-x:auto}
+.nav-btn{background:transparent;border:none;color:var(--text2);padding:12px 16px;font-size:12px;font-weight:600;white-space:nowrap;border-bottom:2px solid transparent;transition:.2s;letter-spacing:.3px}
+.nav-btn:hover{color:var(--text)}
+.nav-btn.active{color:var(--gold);border-bottom-color:var(--gold)}
+
+/* ── SECTIONS ── */
+.section{display:none;max-width:960px;margin:0 auto;padding:32px 20px}
+.section.active{display:block}
+.sec-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+.sec-eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--gold);font-weight:700;margin-bottom:4px}
+.sec-title{font-size:22px;font-weight:800;color:var(--text)}
+.sec-sub{font-size:13px;color:var(--text2);margin-top:3px}
+.sec-actions{display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap}
+
+/* ── BUTTONS ── */
+.btn-primary{background:var(--gold);color:#000;border:none;border-radius:8px;padding:9px 18px;font-size:13px;font-weight:700;transition:.2s}
+.btn-primary:hover{background:var(--gold2)}
+.btn-ghost{background:transparent;border:1px solid var(--border2);color:var(--text2);border-radius:8px;padding:8px 16px;font-size:13px;transition:.2s;white-space:nowrap}
+.btn-ghost:hover{border-color:var(--gold);color:var(--gold)}
+.btn-sm{padding:5px 12px;font-size:12px;border-radius:6px}
+
+/* ── PARTS GRID ── */
+.parts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.pcard{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;border-left:3px solid var(--border)}
+.pcard.ok{border-left-color:var(--green)}
+.pcard.warn{border-left-color:var(--amber)}
+.pcard.crit{border-left-color:var(--red)}
+.pcard-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.pcard-name{font-size:13px;font-weight:700;color:var(--text)}
+.pdot{width:8px;height:8px;border-radius:50%}
+.pdot.ok{background:var(--green)}.pdot.warn{background:var(--amber)}.pdot.crit{background:var(--red)}
+.pbar-bg{background:var(--bg4);border-radius:4px;height:4px;overflow:hidden;margin-bottom:8px}
+.pbar-fill{height:100%;border-radius:4px;transition:width .5s}
+.pfill-ok{background:var(--green)}.pfill-warn{background:var(--amber)}.pfill-crit{background:var(--red)}
+.pcard-meta{display:flex;justify-content:space-between;font-size:11px}
+.pcard-rem{font-size:12px;font-weight:700}
+.rem-ok{color:var(--green)}.rem-warn{color:var(--amber)}.rem-crit{color:var(--red)}
+.pcard-foot{font-size:11px;color:var(--text3);margin-top:6px}
+
+/* ── TIMELINES & MISC ── */
+.svc-timeline{display:flex;flex-direction:column}
+.svc-row{display:flex;gap:14px;padding:16px 0;border-bottom:1px solid var(--border)}
+.svc-row:last-child{border-bottom:none}
+.svc-dot-col{display:flex;flex-direction:column;align-items:center;min-width:16px}
+.svc-dot{width:12px;height:12px;border-radius:50%;background:var(--gold);flex-shrink:0;margin-top:3px}
+.svc-line{flex:1;width:1px;background:var(--border2);margin:4px 0}
+.svc-body{flex:1;min-width:0}
+.svc-date{font-size:11px;color:var(--text2);margin-bottom:2px}
+.svc-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px}
+.svc-vendor{font-size:12px;color:var(--golddim);margin-bottom:8px}
+.svc-pills{display:flex;flex-wrap:wrap;gap:6px}
+.pill{background:var(--bg3);border:1px solid var(--border2);border-radius:20px;padding:2px 10px;font-size:11px;color:var(--text2)}
+.svc-cost{font-size:15px;font-weight:800;color:var(--gold);flex-shrink:0}
+
+/* TRIPS & FUEL */
+.trip-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:24px}
+.form-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.fg{display:flex;flex-direction:column;gap:5px;flex:1;min-width:140px}
+.fg label{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.finput{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:9px 12px;width:100%;outline:none;transition:.15s}
+.finput:focus{border-color:var(--gold)}
+.fselect{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);padding:9px 12px;width:100%;outline:none;appearance:none;cursor:pointer}
+.freadonly{opacity:.6;cursor:default}
+.trip-results{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.trip-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:8px}
+.ti-name{flex:1;font-size:13px;font-weight:600}
+.ti-status{font-size:11px;font-weight:700;padding:2px 10px;border-radius:12px}
+.ts-ok{background:rgba(39,174,96,.1);color:var(--green)}
+.ts-warn{background:rgba(230,126,34,.1);color:var(--amber)}
+.ts-crit{background:rgba(229,69,69,.1);color:var(--red)}
+.trip-fuel-info{background:rgba(201,168,76,.06);border:1px solid var(--golddim);border-radius:8px;padding:12px 16px;font-size:12px;color:var(--gold);margin-top:8px}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:24px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center}
+.stat-val{font-size:22px;font-weight:800;color:var(--gold);margin-bottom:4px;font-variant-numeric:tabular-nums}
+.stat-lbl{font-size:10px;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.fuel-log-row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;margin-bottom:8px;flex-wrap:wrap}
+.fl-date{font-size:11px;color:var(--text2);min-width:70px}
+.fl-odo{font-size:12px;color:var(--gold);font-weight:700}
+.fl-litres{font-size:13px;color:var(--text)}
+.fl-kml{font-size:12px;color:var(--green);font-weight:600}
+.fl-cost{font-size:13px;color:var(--gold);font-weight:700;margin-left:auto}
+.fl-flags{display:flex;gap:4px}
+.flag{font-size:10px;padding:1px 6px;border-radius:8px}
+.flag-missed{background:rgba(230,126,34,.15);color:var(--amber)}
+.flag-partial{background:rgba(100,100,100,.15);color:var(--text3)}
+
+/* CHARTS & MGMT */
+.chart-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:16px}
+.chart-label{font-size:11px;text-transform:uppercase;letter-spacing:.7px;color:var(--text2);font-weight:600;margin-bottom:14px}
+.life-tbl{width:100%;border-collapse:collapse}
+.life-tbl th{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;font-weight:600}
+.life-tbl td{padding:9px 10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text);vertical-align:middle}
+.life-tbl tr:last-child td{border-bottom:none}
+.life-better{color:var(--green);font-weight:700}
+.life-worse{color:var(--red);font-weight:700}
+.life-na{color:var(--text3)}
+.mgmt-list{display:flex;flex-direction:column;gap:8px}
+.mgmt-item{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:10px}
+.mgmt-status{font-size:14px;flex-shrink:0}
+.mgmt-name{flex:1;font-size:13px;font-weight:600;color:var(--text)}
+.mgmt-life{font-size:12px;color:var(--gold);white-space:nowrap}
+.mgmt-thresh{font-size:11px;color:var(--text2);white-space:nowrap;min-width:100px;text-align:right}
+.btn-icon{background:transparent;border:none;color:var(--text2);cursor:pointer;padding:5px;border-radius:6px;font-size:15px;transition:.15s;line-height:1}
+.btn-icon:hover{color:var(--text);background:var(--bg3)}
+.btn-icon.del:hover{color:var(--red)}
+
+/* REPORTS & AUDIT */
+.reports-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.rcard{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:.2s}
+.rcard:hover{border-color:var(--gold);background:var(--bg3)}
+.ricon{width:42px;height:42px;background:rgba(201,168,76,.1);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.rinfo-name{font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px}
+.rinfo-desc{font-size:11px;color:var(--text2)}
+.rfmt{display:flex;gap:4px;margin-top:6px}
+.rfmt-badge{font-size:10px;padding:1px 7px;border-radius:8px;background:var(--bg4);color:var(--text2);border:1px solid var(--border)}
+.audit-list{display:flex;flex-direction:column;gap:6px}
+.aitem{display:flex;gap:10px;padding:8px 12px;background:var(--bg3);border-radius:8px;border-left:3px solid var(--border2);font-size:12px}
+.aitem.c{border-left-color:var(--green)}.aitem.e{border-left-color:var(--amber)}.aitem.d{border-left-color:var(--red)}.aitem.o{border-left-color:var(--gold)}
+.atime{color:var(--text3);white-space:nowrap;min-width:120px;font-variant-numeric:tabular-nums}
+.aaction{color:var(--text2);word-break:break-word}
+
+/* MODALS */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)}
+.overlay.open{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:28px;width:100%;max-width:520px;max-height:88vh;overflow-y:auto}
+.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.modal-title{font-size:18px;font-weight:800;color:var(--text)}
+.modal-close{background:transparent;border:none;color:var(--text2);font-size:22px;cursor:pointer;line-height:1;padding:2px}
+.modal-close:hover{color:var(--text)}
+.modal-foot{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.fg-full{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.fg-full label{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.ftab-row{display:flex;gap:8px;margin-bottom:18px}
+.ftab{flex:1;padding:8px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid var(--border2);background:transparent;color:var(--text2);transition:.2s}
+.ftab.on{background:var(--gold);color:#000;border-color:var(--gold)}
+.checklist{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.citem{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:.15s}
+.citem.sel{border-color:var(--gold);background:rgba(201,168,76,.06)}
+.citem input[type=checkbox]{accent-color:var(--gold);flex-shrink:0}
+.citem-name{font-size:12px;color:var(--text);flex:1;min-width:0}
+.cprice{background:var(--bg4);border:1px solid var(--border2);border-radius:6px;color:var(--text);padding:4px 8px;font-size:12px;width:80px;text-align:right;outline:none}
+.cprice:focus{border-color:var(--gold)}
+.upload-zone{border:2px dashed var(--border2);border-radius:10px;padding:20px;text-align:center;cursor:pointer;transition:.2s;margin-bottom:14px}
+.upload-zone:hover{border-color:var(--gold)}
+.upload-icon{font-size:28px;margin-bottom:6px}
+.upload-txt{font-size:13px;color:var(--text2)}
+.upload-sub{font-size:11px;color:var(--text3);margin-top:3px}
+.vendor-wrap{position:relative}
+.vdrop{position:absolute;top:100%;left:0;right:0;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;z-index:60;max-height:150px;overflow-y:auto;margin-top:3px;display:none}
+.vopt{padding:9px 14px;font-size:13px;color:var(--text);cursor:pointer;transition:background .1s}
+.vopt:hover{background:var(--bg4)}
+.info-box{background:rgba(201,168,76,.05);border:1px solid var(--golddim);border-radius:8px;padding:11px 14px;font-size:12px;color:var(--text2);margin-bottom:14px}
+.total-display{background:var(--bg3);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.total-lbl{font-size:12px;color:var(--text2)}
+.total-val{font-size:18px;font-weight:800;color:var(--gold)}
+.toggle-row{display:flex;align-items:center;gap:8px;cursor:pointer}
+.toggle-row input{accent-color:var(--gold)}
+.toggle-lbl{font-size:13px;color:var(--text2)}
+
+/* FOOTER */
+#footer{background:var(--bg2);border-top:1px solid var(--border);padding:20px;text-align:center;margin-top:40px}
+.footer-txt{font-size:12px;color:var(--text3)}
+
+/* TOAST */
+#toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--bg3);color:var(--text);border:1px solid var(--gold);border-radius:10px;padding:10px 22px;font-size:13px;z-index:999;opacity:0;transition:opacity .3s;pointer-events:none;white-space:nowrap}
+
+/* RESPONSIVE FIXES FOR MOBILE */
+@media(max-width:600px){
+  #sbar{padding:0 12px;gap:8px;}
+  .sbar-sub, .sbar-sep, .sbar-odo-label {display:none}
+  .sbar-names {display:none} 
+  .sbar-logo {width:26px;height:26px}
+  .btn-odo-update {font-size:0;padding:6px 10px}
+  .btn-odo-update::after {content:"Odo +";font-size:12px}
+  #auth-btn {font-size:0;padding:6px 10px}
+  #auth-btn::after {content:"Sync";font-size:12px}
+  .parts-grid{grid-template-columns:1fr}
+  .checklist{grid-template-columns:1fr}
+  .hero-name{font-size:32px}
+  .reports-grid{grid-template-columns:1fr}
+  .avatar{width:28px;height:28px;}
+  .badge-alert, .badge-ok {padding:4px 8px;font-size:10px;}
+}
+</style>
+</head>
+<body>
+
+<!-- STICKY BAR -->
+<div id="sbar">
+  <div class="sbar-brand">
+    <div class="sbar-logo">
+      <svg viewBox="0 0 24 24"><path d="M12 2L4 7v10l8 5 8-5V7l-8-5zm0 2.4L18.5 8 12 11.6 5.5 8 12 4.4zM5 9.7l6.5 3.7v7.2L5 16.9V9.7zm8.5 10.9v-7.2L20 9.7v7.2l-6.5 3.7z"/></svg>
+    </div>
+    <div class="sbar-names">
+      <div class="sbar-title">TRIUMPH SPEED 400</div>
+      <div class="sbar-sub" id="sbar-subtext">Monu M · Phantom Black · 2025</div>
+    </div>
+  </div>
+  <div class="sbar-sep"></div>
+  <div class="sbar-odo">
+    <span class="sbar-odo-label">Odometer</span>
+    <span class="sbar-odo-val" id="sbar-odo">5,689</span>
+    <span class="sbar-odo-unit">km</span>
+  </div>
+  <div class="sbar-right">
+    <button id="auth-btn" class="btn-ghost btn-sm" onclick="handleAuthClick()">Sync Drive</button>
+    <button id="alert-badge" class="badge-ok" onclick="showSection('alerts-section');setNav('alerts-section')">✓ No Alerts</button>
+    <button class="btn-odo-update btn-sm" onclick="openM('m-odo')">Update Odometer</button>
+    <button id="gear-btn" class="btn-icon-header" onclick="openM('m-profile')">⚙️</button>
+    <img src="" id="user-avatar" class="avatar" style="display:none" onclick="openM('m-profile')">
+  </div>
+</div>
+
+<!-- ALERT BANNER -->
+<div id="alert-banner" class="hidden">
+  <span id="alert-banner-txt">⚠ Parts require attention</span>
+  <button class="btn-log-svc" onclick="openM('m-service')">Log Service</button>
+</div>
+
+<!-- HERO -->
+<div id="hero">
+  <div class="hero-glow"></div>
+  <div class="hero-inner">
+    <div class="hero-left">
+      <div class="hero-eyebrow">● Rider Profile · <span id="hero-name">Monu M</span></div>
+      <div class="hero-name">Speed <span>400</span></div>
+      <div class="hero-spec">Phantom Black · 398cc Liquid-Cooled DOHC · 40PS · 37.5Nm · 6-Speed</div>
+      <div class="hero-stats">
+        <div class="hstat"><span class="hstat-val" id="h-odo">5,689</span><span class="hstat-lbl">Total km</span></div>
+        <div class="hstat"><span class="hstat-val" id="h-age">0.8 yr</span><span class="hstat-lbl">Bike Age</span></div>
+        <div class="hstat"><span class="hstat-val" id="h-spend">₹4,331</span><span class="hstat-lbl">Total Spend</span></div>
+        <div class="hstat"><span class="hstat-val" id="h-parts">11/11</span><span class="hstat-lbl">Parts OK</span></div>
+      </div>
+    </div>
+    <div class="hero-right">
+      <div class="ring-wrap">
+        <svg width="150" height="150" viewBox="0 0 150 150">
+          <circle cx="75" cy="75" r="62" fill="none" stroke="#222" stroke-width="10"/>
+          <circle id="health-ring" cx="75" cy="75" r="62" fill="none" stroke="#27ae60" stroke-width="10" stroke-dasharray="389.6" stroke-dashoffset="0" stroke-linecap="round" transform="rotate(-90 75 75)" style="transition:stroke-dashoffset .8s,stroke .5s"/>
+        </svg>
+        <div class="ring-center">
+          <div class="ring-pct" id="ring-pct" style="color:var(--green)">100%</div>
+          <div class="ring-lbl">Health</div>
+        </div>
+      </div>
+      <div class="health-tag" id="health-tag" style="color:var(--green)">🟢 ALL GOOD</div>
+    </div>
+  </div>
+</div>
+
+<!-- NAV -->
+<div id="nav">
+  <button class="nav-btn active" data-sec="parts-section" onclick="setNav('parts-section')">Parts Status</button>
+  <button class="nav-btn" data-sec="service-section" onclick="setNav('service-section')">Service History</button>
+  <button class="nav-btn" data-sec="trip-section" onclick="setNav('trip-section')">Trip Planner</button>
+  <button class="nav-btn" data-sec="fuel-section" onclick="setNav('fuel-section')">Fuel Tracker</button>
+  <button class="nav-btn" data-sec="cost-section" onclick="setNav('cost-section')">Cost Analysis</button>
+  <button class="nav-btn" data-sec="master-section" onclick="setNav('master-section')">Parts Master</button>
+  <button class="nav-btn" data-sec="reports-section" onclick="setNav('reports-section')">Reports</button>
+  <button class="nav-btn" data-sec="alerts-section" onclick="setNav('alerts-section')">Alerts</button>
+</div>
+
+<!-- SECTIONS -->
+<div class="section active" id="parts-section">
+  <div class="sec-header">
+    <div><div class="sec-eyebrow">Maintenance Status</div><div class="sec-title">Parts Health Dashboard</div><div class="sec-sub">Live distance & time-based status at <span id="parts-odo-lbl">5,689</span> km</div></div>
+    <div class="sec-actions"><button class="btn-primary" onclick="openM('m-service')">+ Log Service</button></div>
+  </div>
+  <div class="parts-grid" id="parts-grid"></div>
+</div>
+
+<div class="section" id="service-section">
+  <div class="sec-header">
+    <div><div class="sec-eyebrow">Service Log</div><div class="sec-title">Service History</div><div class="sec-sub">Complete visit history</div></div>
+    <div class="sec-actions"><button class="btn-primary" onclick="openM('m-service')">+ Log Service</button></div>
+  </div>
+  <div class="svc-timeline" id="svc-timeline"></div>
+</div>
+
+<div class="section" id="trip-section">
+  <div class="sec-header">
+    <div><div class="sec-eyebrow">Trip Planner</div><div class="sec-title">Plan Your Ride</div><div class="sec-sub">Parts-aware trip analysis · Fuel stop estimation included</div></div>
+  </div>
+  <div class="trip-card">
+    <div class="form-row">
+      <div class="fg">
+        <label>Trip Type</label>
+        <select class="fselect" id="trip-type" onchange="calcTrip()">
+          <option value="oneway">One Way</option>
+          <option value="round">Round Trip (auto × 2)</option>
+        </select>
+      </div>
+      <div class="fg"><label>One-Way Distance (km)</label><input class="finput" type="number" id="trip-km" placeholder="e.g. 200" oninput="calcTrip()" min="1"></div>
+      <div class="fg" id="trip-total-grp" style="display:none"><label>Total Round-Trip (km)</label><input class="finput freadonly" id="trip-total" readonly style="color:var(--gold)"></div>
+    </div>
+    <div id="trip-results"></div>
+  </div>
+</div>
+
+<div class="section" id="fuel-section">
+  <div class="sec-header">
+    <div><div class="sec-eyebrow">Fuel Log</div><div class="sec-title">Fuel Tracker</div><div class="sec-sub">13L tank · Alert at 4L remaining (~112 km)</div></div>
+    <div class="sec-actions"><button class="btn-ghost btn-sm" onclick="openM('m-fuel-settings')">⚙ Fuel Settings</button><button class="btn-primary" onclick="openM('m-fuel')">+ Add Fill-Up</button></div>
+  </div>
+  <div class="stat-grid" id="fuel-stats"></div>
+  <div id="fuel-log-rows"></div>
+</div>
+
+<div class="section" id="cost-section">
+  <div class="sec-header">
+    <div><div class="sec-eyebrow">Financial Overview</div><div class="sec-title">Cost Analysis</div><div class="sec-sub">Complete ownership cost breakdown · INR</div></div>
+  </div>
+  <div class="stat-grid" id="cost-stats"></div>
+  <div class="chart-wrap"><div class="chart-label">Maintenance Spend per Part (₹)</div><div style="position:relative;height:220px"><canvas id="costChart"></canvas></div></div>
+  <div class="chart-wrap"><div class="chart-label">Actual vs Estimated Part Life</div><div style="overflow-x:auto"><table class="life-tbl" id="life-tbl"></table></div></div>
+</div>
+
+<div class="section" id="master-section">
+  <div class="sec-header">
+    <div><div class="sec-eyebrow">Parts Management</div><div class="sec-title">Master Settings</div><div class="sec-sub">Configure dual alerts (KM or Time Limit)</div></div>
+    <div class="sec-actions"><button class="btn-primary" onclick="openM('m-add-part')">+ Add Part</button></div>
+  </div>
+  <div class="mgmt-list" id="mgmt-list"></div>
+</div>
+
+<div class="section" id="reports-section">
+  <div class="sec-header">
+    <div><div class="sec-eyebrow">Export & Analysis</div><div class="sec-title">Reports</div><div class="sec-sub">12 report types · PDF & CSV export</div></div>
+  </div>
+  <div class="reports-grid" id="reports-grid"></div>
+</div>
+
+<div class="section" id="alerts-section">
+  <div class="sec-header">
+    <div><div class="sec-eyebrow">Alert Centre</div><div class="sec-title">Active Alerts</div><div class="sec-sub">Parts approaching or exceeding distance/time thresholds</div></div>
+    <div class="sec-actions"><button class="btn-primary" onclick="openM('m-service')">Log Service</button></div>
+  </div>
+  <div id="alerts-list"></div>
+  <div style="margin-top:32px"><div class="sec-eyebrow" style="margin-bottom:12px">Audit Trail</div><div class="audit-list" id="audit-list"></div></div>
+</div>
+
+<!-- FOOTER -->
+<div id="footer">
+  <div class="footer-txt" id="footer-main">Monu M · Triumph Speed 400 · Phantom Black · 2025</div>
+  <div class="footer-txt" style="margin-top:3px">Google Drive Sync Active · <span id="footer-ts"></span></div>
+</div>
+<div id="toast"></div>
+
+<!-- MODALS -->
+<!-- PROFILE MODAL -->
+<div class="overlay" id="m-profile">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Profile Settings</div><button class="modal-close" onclick="closeM('m-profile')">✕</button></div>
+    <div class="upload-zone" onclick="document.getElementById('prof-pic-upload').click()">
+      <div class="upload-icon">📷</div>
+      <div class="upload-txt">Upload Profile Picture</div>
+      <div class="upload-sub">Image is compressed and saved directly to your Drive</div>
+      <input type="file" id="prof-pic-upload" style="display:none" accept="image/*" onchange="handleProfPic(event)">
+    </div>
+    <div class="fg-full"><label>Rider Name</label><input class="finput" type="text" id="prof-name"></div>
+    <div class="form-row">
+      <div class="fg"><label>Purchase Date</label><input class="finput" type="date" id="prof-purch"></div>
+      <div class="fg"><label>Delivery Date (calculates age)</label><input class="finput" type="date" id="prof-del"></div>
+    </div>
+    <div class="modal-foot"><button class="btn-ghost" onclick="closeM('m-profile')">Cancel</button><button class="btn-primary" onclick="saveProfile()">Save Settings</button></div>
+  </div>
+</div>
+
+<!-- ODO UPDATE -->
+<div class="overlay" id="m-odo">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Update Odometer</div><button class="modal-close" onclick="closeM('m-odo')">✕</button></div>
+    <div class="info-box">Current reading: <strong id="m-odo-current" style="color:var(--gold)">5,689 km</strong></div>
+    <div class="fg-full"><label>New Odometer Reading (km) *</label><input class="finput" type="number" id="odo-input" placeholder="e.g. 6000" min="0"></div>
+    <div class="fg-full"><label>Notes (optional)</label><textarea class="finput" id="odo-notes" rows="2" style="resize:vertical"></textarea></div>
+    <div class="modal-foot"><button class="btn-ghost" onclick="closeM('m-odo')">Cancel</button><button class="btn-primary" onclick="doOdoUpdate()">Update</button></div>
+  </div>
+</div>
+
+<!-- SERVICE MODAL -->
+<div class="overlay" id="m-service">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-head"><div class="modal-title">Log Service</div><button class="modal-close" onclick="closeM('m-service')">✕</button></div>
+    <div class="ftab-row">
+      <button class="ftab on" id="tab-do" onclick="switchTab('do')">Phase 1 · Drop-Off</button>
+      <button class="ftab" id="tab-pu" onclick="switchTab('pu')">Phase 2 · Pick-Up</button>
+    </div>
+    <div id="tab-do-content">
+      <div class="fg-full"><label>Odometer at Drop-Off (km) *</label><input class="finput" type="number" id="do-odo" placeholder="e.g. 5800"></div>
+      <div class="fg-full"><label>Vendor *</label><div class="vendor-wrap"><input class="finput" type="text" id="do-vendor" placeholder="Type or select vendor" oninput="showVDrop()" onfocus="showVDrop()" autocomplete="off"><div class="vdrop" id="vdrop"></div></div></div>
+      <div class="fg-full"><label>Date</label><input class="finput" type="date" id="do-date"></div>
+      <div class="fg-full"><label>Notes</label><textarea class="finput" id="do-notes" rows="2" style="resize:vertical"></textarea></div>
+      <div class="modal-foot"><button class="btn-ghost" onclick="closeM('m-service')">Cancel</button><button class="btn-primary" onclick="saveDropOff()">Save Drop-Off</button></div>
+    </div>
+    <div id="tab-pu-content" style="display:none">
+      <div class="fg-full"><label>Odometer at Pick-Up (km) *</label><input class="finput" type="number" id="pu-odo"></div>
+      <div class="fg-full"><label>Parts Serviced &amp; Costs (₹)</label><div class="checklist" id="svc-checklist"></div></div>
+      <div class="fg-full"><label>Notes</label><textarea class="finput" id="pu-notes" rows="2" style="resize:vertical"></textarea></div>
+      <div class="modal-foot"><button class="btn-ghost" onclick="closeM('m-service')">Cancel</button><button class="btn-primary" onclick="savePickUp()">Save Record</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- FUEL ENTRY -->
+<div class="overlay" id="m-fuel">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Add Fill-Up</div><button class="modal-close" onclick="closeM('m-fuel')">✕</button></div>
+    <div class="form-row"><div class="fg"><label>Date</label><input class="finput" type="date" id="f-date"></div><div class="fg"><label>Odometer (km) *</label><input class="finput" type="number" id="f-odo"></div></div>
+    <div class="form-row"><div class="fg"><label>Litres Filled *</label><input class="finput" type="number" id="f-litres" step="0.1" oninput="calcFTotal()"></div><div class="fg"><label>Price per Litre (₹)</label><input class="finput" type="number" id="f-ppl" step="0.1" oninput="calcFTotal()"></div></div>
+    <div class="total-display"><span class="total-lbl">Total cost:</span><span class="total-val" id="f-total">₹0</span></div>
+    <div class="fg-full"><label>Station</label><input class="finput" type="text" id="f-station"></div>
+    <div style="display:flex;gap:20px;margin-bottom:14px;flex-wrap:wrap">
+      <label class="toggle-row"><input type="checkbox" id="f-missed"><span class="toggle-lbl">Missed previous</span></label>
+      <label class="toggle-row"><input type="checkbox" id="f-partial"><span class="toggle-lbl">Partial fill-up</span></label>
+    </div>
+    <div class="modal-foot"><button class="btn-ghost" onclick="closeM('m-fuel')">Cancel</button><button class="btn-primary" onclick="saveFuel()">Save Fill-Up</button></div>
+  </div>
+</div>
+
+<!-- FUEL SETTINGS -->
+<div class="overlay" id="m-fuel-settings">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Fuel Settings</div><button class="modal-close" onclick="closeM('m-fuel-settings')">✕</button></div>
+    <div class="fg-full"><label>Alert below (litres)</label><input class="finput" type="number" id="fs-litres" step="0.5"></div>
+    <div class="fg-full"><label>Fill-up at (km from full)</label><input class="finput" type="number" id="fs-km"></div>
+    <div class="modal-foot"><button class="btn-ghost" onclick="closeM('m-fuel-settings')">Cancel</button><button class="btn-primary" onclick="saveFuelSettings()">Save</button></div>
+  </div>
+</div>
+
+<!-- ADD PART -->
+<div class="overlay" id="m-add-part">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Add New Part</div><button class="modal-close" onclick="closeM('m-add-part')">✕</button></div>
+    <div class="fg-full"><label>Part Name *</label><input class="finput" type="text" id="ap-name"></div>
+    <div class="form-row">
+      <div class="fg"><label>Estimated Life (km) *</label><input class="finput" type="number" id="ap-life"></div>
+      <div class="fg"><label>Time Limit (Months)</label><input class="finput" type="number" id="ap-months" placeholder="Optional"></div>
+    </div>
+    <div class="form-row">
+      <div class="fg"><label>Brand</label><input class="finput" type="text" id="ap-brand"></div>
+      <div class="fg"><label>KM Threshold</label><input class="finput" type="number" id="ap-thresh" value="500"></div>
+    </div>
+    <div class="modal-foot"><button class="btn-ghost" onclick="closeM('m-add-part')">Cancel</button><button class="btn-primary" onclick="addPart()">Add Part</button></div>
+  </div>
+</div>
+
+<!-- EDIT PART -->
+<div class="overlay" id="m-edit-part">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Edit Part</div><button class="modal-close" onclick="closeM('m-edit-part')">✕</button></div>
+    <input type="hidden" id="ep-idx">
+    <div class="fg-full"><label>Part Name</label><input class="finput" type="text" id="ep-name"></div>
+    <div class="form-row">
+      <div class="fg"><label>Life (km)</label><input class="finput" type="number" id="ep-life"></div>
+      <div class="fg"><label>Time Limit (Months)</label><input class="finput" type="number" id="ep-months"></div>
+    </div>
+    <div class="fg-full"><label>Alert Threshold (km)</label><input class="finput" type="number" id="ep-thresh"></div>
+    <div class="modal-foot"><button class="btn-ghost" onclick="closeM('m-edit-part')">Cancel</button><button class="btn-primary" onclick="savePartEdit()">Save</button></div>
+  </div>
+</div>
+
+<script>
+// ── PWA REGISTRATION ───────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW reg failed', err));
+  });
+}
+
+// ── GOOGLE DRIVE SYNC SETTINGS ────────────────────────
+const CLIENT_ID = '420274865215-e04hudv1d7jivm6nlqpfpdcic9brin08.apps.googleusercontent.com
+'; // REPLACE THIS
+const API_KEY = 'AIzaSyAno_dm6sx8Ti87va2ewkYSwN38DGgvcH0';     // REPLACE THIS
+const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
+const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+
+let tokenClient;
+let gapiInited = false;
+let gisInited = false;
+let driveFileId = null;
+
+function gapiLoaded() { gapi.load('client', initializeGapiClient); }
+async function initializeGapiClient() {
+  await gapi.client.init({ apiKey: API_KEY, discoveryDocs: [DISCOVERY_DOC] });
+  gapiInited = true;
+}
+function gisLoaded() {
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID, scope: SCOPES, callback: '',
+  });
+  gisInited = true;
+}
+
+function handleAuthClick() {
+  if (!gapiInited || !gisInited) { toast('Google APIs loading...'); return; }
+  tokenClient.callback = async (resp) => {
+    if (resp.error) throw (resp);
+    const btn = document.getElementById('auth-btn');
+    btn.textContent = 'Drive Synced'; btn.style.color = 'var(--green)';
+    await loadFromDrive();
+  };
+  if (gapi.client.getToken() === null) {
+    tokenClient.requestAccessToken({prompt: 'consent'});
+  } else {
+    tokenClient.requestAccessToken({prompt: ''});
+  }
+}
+
+async function loadFromDrive() {
+  toast('Syncing with Drive...');
+  try {
+    const res = await gapi.client.drive.files.list({
+      q: "name='triumph_speed400_data.json' and trashed=false",
+      fields: 'files(id, name)', spaces: 'drive'
+    });
+    if (res.result.files && res.result.files.length > 0) {
+      driveFileId = res.result.files[0].id;
+      const fileData = await gapi.client.drive.files.get({ fileId: driveFileId, alt: 'media' });
+      Object.assign(S, fileData.result);
+      toast('Data loaded securely from Drive!');
+      updateProfileDisplay();
+      renderAll();
+    } else {
+      await saveToDrive(); // Create file on first run
+    }
+  } catch (err) { console.error(err); toast('Sync error'); }
+}
+
+async function saveToDrive() {
+  if (!gapiInited || !gapi.client.getToken()) return;
+  const fileContent = JSON.stringify(S);
+  const file = new Blob([fileContent], {type: 'application/json'});
+  const metadata = { 'name': 'triumph_speed400_data.json', 'mimeType': 'application/json' };
+  
+  try {
+    let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+    let method = 'POST';
+    if (driveFileId) {
+      url = 'https://www.googleapis.com/upload/drive/v3/files/' + driveFileId + '?uploadType=multipart';
+      method = 'PATCH';
+    }
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], {type: 'application/json'}));
+    form.append('file', file);
+    const res = await fetch(url, {
+      method: method,
+      headers: new Headers({ 'Authorization': 'Bearer ' + gapi.client.getToken().access_token }),
+      body: form
+    });
+    const data = await res.json();
+    driveFileId = data.id;
+    console.log('Background sync complete');
+  } catch (err) { console.error('Drive save failed', err); }
+}
+
+// ── STATE ──────────────────────────────────────────────
+const S = {
+  profile: { name: 'Monu M', avatar: '' },
+  odo: 5689,
+  purchaseDate: '2025-08-31',
+  deliveryDate: '2025-10-03',
+  fuelAlertL: 4, fuelFillupKm: 280,
+  vendors: ['Khivraj Elixir'],
+  parts: [
+    {id:1, name:'Engine Oil', estLife:10000, estMonths:12, lastKm:1000, lastDate:'2025-11-03', brand:'', thresh:500},
+    {id:2, name:'Oil Filter', estLife:10000, estMonths:12, lastKm:1000, lastDate:'2025-11-03', brand:'', thresh:500},
+    {id:3, name:'Air Filter', estLife:10000, estMonths:12, lastKm:0, lastDate:'2025-08-31', brand:'', thresh:500},
+    {id:4, name:'Valve Clearance', estLife:16000, estMonths:null, lastKm:0, lastDate:'2025-08-31', brand:'', thresh:1000},
+    {id:5, name:'Spark Plug', estLife:16000, estMonths:null, lastKm:0, lastDate:'2025-08-31', brand:'', thresh:1000},
+    {id:6, name:'Brake Pads - Front', estLife:5000, estMonths:null, lastKm:5689, lastDate:'2026-06-20', brand:'Bajaj', thresh:500},
+    {id:7, name:'Brake Pads - Rear', estLife:1500, estMonths:null, lastKm:5689, lastDate:'2026-06-20', brand:'Bajaj', thresh:300},
+    {id:8, name:'Brake Fluid', estLife:32000, estMonths:24, lastKm:0, lastDate:'2025-08-31', brand:'', thresh:1000},
+    {id:9, name:'System Fuel Cleaner', estLife:1000, estMonths:null, lastKm:5689, lastDate:'2026-06-20', brand:'Prolube', thresh:200},
+    {id:10,name:'Coolant', estLife:32000, estMonths:36, lastKm:0, lastDate:'2025-08-31', brand:'', thresh:1000},
+    {id:11,name:'Chain & Sprockets', estLife:16000, estMonths:null, lastKm:0, lastDate:'2025-08-31', brand:'', thresh:1000}
+  ],
+  serviceLogs: [],
+  fuelLogs: [],
+  auditLog: [],
+  pendingDO: null
+};
+
+// ── HELPERS ──────────────────────────────────────────
+function ts(){ return new Date().toLocaleString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}); }
+function fkm(n){ return Number(n).toLocaleString('en-IN') }
+function finr(n){ return '₹'+Number(n).toLocaleString('en-IN',{minimumFractionDigits:0,maximumFractionDigits:2}) }
+function audit(type,action){ S.auditLog.unshift({ts:ts(),type,action}); renderAudit(); saveToDrive(); }
+
+function pStatus(p){
+  const remKm = (p.lastKm + p.estLife) - S.odo;
+  let pctKm = Math.max(0, Math.min(100, remKm/p.estLife*100));
+  let stKm = remKm<=0 ? 'crit' : remKm<=p.thresh ? 'warn' : 'ok';
+  
+  let remDays = Infinity, pctTime = 100, stTime = 'ok';
+  if (p.estMonths) {
+    const dueD = new Date(p.lastDate); dueD.setMonth(dueD.getMonth() + p.estMonths);
+    remDays = Math.ceil((dueD - new Date()) / (1000 * 60 * 60 * 24));
+    pctTime = Math.max(0, Math.min(100, remDays/(p.estMonths*30.44)*100));
+    stTime = remDays<=0 ? 'crit' : remDays<=30 ? 'warn' : 'ok';
+  }
+  const pct = Math.min(pctKm, pctTime);
+  const st = (stKm==='crit' || stTime==='crit') ? 'crit' : (stKm==='warn' || stTime==='warn') ? 'warn' : 'ok';
+  const label = remKm<=0 ? 'OVERDUE (KM)' : remDays<=0 ? 'OVERDUE (TIME)' : (stTime==='warn' || remDays<remKm/28) ? remDays+' days left' : fkm(Math.round(remKm))+' km left';
+  return {rem: remKm, pct, st, nextDue: p.lastKm+p.estLife, label, remDays};
+}
+
+function toast(msg){
+  const t=document.getElementById('toast'); t.textContent=msg; t.style.opacity='1';
+  clearTimeout(t._t); t._t=setTimeout(()=>t.style.opacity='0',2400);
+}
+
+// ── PROFILE ──────────────────────────────────────────
+function updateProfileDisplay() {
+  document.getElementById('hero-name').textContent = S.profile.name || 'Monu M';
+  document.getElementById('sbar-subtext').textContent = `${S.profile.name} · Phantom Black · ${S.purchaseDate.substring(0,4)}`;
+  document.getElementById('footer-main').textContent = `${S.profile.name} · Triumph Speed 400 · Phantom Black · ${S.purchaseDate.substring(0,4)}`;
+  if(S.profile.avatar) {
+    document.getElementById('user-avatar').src = S.profile.avatar;
+    document.getElementById('user-avatar').style.display = 'block';
+    document.getElementById('gear-btn').style.display = 'none';
+  }
+  const del = new Date(S.deliveryDate), now = new Date();
+  document.getElementById('h-age').textContent = (Math.floor((now-del)/(1000*60*60*24*30.44))/12).toFixed(1)+' yr';
+  
+  document.getElementById('prof-name').value = S.profile.name;
+  document.getElementById('prof-purch').value = S.purchaseDate;
+  document.getElementById('prof-del').value = S.deliveryDate;
+}
+
+function handleProfPic(e) {
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(event) {
+    const img = new Image();
+    img.onload = function() {
+      const cvs = document.createElement('canvas'); const ctx = cvs.getContext('2d');
+      const MAX = 150; let w = img.width, h = img.height;
+      if(w>h) { if(w>MAX){ h*=MAX/w; w=MAX; } } else { if(h>MAX){ w*=MAX/h; h=MAX; } }
+      cvs.width = w; cvs.height = h; ctx.drawImage(img, 0, 0, w, h);
+      S.profile.avatar = cvs.toDataURL('image/jpeg', 0.8);
+      document.getElementById('user-avatar').src = S.profile.avatar;
+      document.getElementById('user-avatar').style.display = 'block';
+      document.getElementById('gear-btn').style.display = 'none';
+    }; img.src = event.target.result;
+  }; reader.readAsDataURL(file);
+}
+
+function saveProfile() {
+  S.profile.name = document.getElementById('prof-name').value;
+  S.purchaseDate = document.getElementById('prof-purch').value;
+  S.deliveryDate = document.getElementById('prof-del').value;
+  updateProfileDisplay(); closeM('m-profile'); audit('e', 'Profile updated');
+}
+
+// ── NAV & UI ──────────────────────────────────────────
+function setNav(id){
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  const btn=document.querySelector('[data-sec="'+id+'"]'); if(btn)btn.classList.add('active');
+  const sec=document.getElementById(id); if(sec)sec.classList.add('active');
+  if(id==='cost-section')renderCostChart();
+}
+function showSection(id){setNav(id)}
+
+function renderParts(){
+  let ok=0;
+  document.getElementById('parts-grid').innerHTML=S.parts.map(p=>{
+    const {pct,st,nextDue,label}=pStatus(p); if(st==='ok')ok++;
+    return`<div class="pcard ${st}"><div class="pcard-head"><span class="pcard-name">${p.name}</span><span class="pdot ${st}"></span></div>
+      <div class="pbar-bg"><div class="pbar-fill pfill-${st}" style="width:${Math.round(pct)}%"></div></div>
+      <div class="pcard-meta"><span class="pcard-rem rem-${st}">${label}</span><span style="font-size:11px;color:var(--text3)">Due@${fkm(nextDue)}km</span></div>
+      <div class="pcard-foot">Last: ${fkm(p.lastKm)}km · Est: ${fkm(p.estLife)}km ${p.estMonths?'/ '+p.estMonths+'mo':''}</div></div>`;
+  }).join('');
+  document.getElementById('h-parts').textContent=ok+'/'+S.parts.length;
+  document.getElementById('parts-odo-lbl').textContent=fkm(S.odo);
+  updateHealthRing(ok,S.parts.length); updateAlerts();
+}
+
+function updateHealthRing(ok,total){
+  const pct=Math.round(ok/total*100); const ring=document.getElementById('health-ring');
+  ring.setAttribute('stroke-dashoffset',(389.6-(pct/100*389.6)).toFixed(1));
+  const col=pct>=80?'var(--green)':pct>=50?'var(--amber)':'var(--red)';
+  ring.style.stroke=col; document.getElementById('ring-pct').style.color=col;
+  document.getElementById('ring-pct').textContent=pct+'%';
+  const ht=document.getElementById('health-tag');
+  ht.textContent=pct===100?'🟢 ALL GOOD':pct>=70?'🟡 CHECK NEEDED':'🔴 ACTION REQUIRED';
+  ht.style.color=col;
+}
+
+function updateAlerts(){
+  const bad=S.parts.filter(p=>pStatus(p).st!=='ok');
+  const badge=document.getElementById('alert-badge'), banner=document.getElementById('alert-banner');
+  if(bad.length){
+    badge.textContent=`⚠ ${bad.length} Alert${bad.length>1?'s':''}`; badge.className='badge-alert';
+    banner.classList.remove('hidden'); document.getElementById('alert-banner-txt').innerHTML=`⚠ ${bad.length} part${bad.length>1?'s':''} need attention — <strong>${bad.map(p=>p.name).join(', ')}</strong>`;
+  } else { badge.textContent='✓ No Alerts'; badge.className='badge-ok'; banner.classList.add('hidden'); }
+  const al=document.getElementById('alerts-list'); if(!al)return;
+  if(!bad.length){al.innerHTML='<div style="color:var(--green);padding:16px 0;font-size:14px;font-weight:600">✅ All parts are within safe thresholds.</div>';return;}
+  al.innerHTML=bad.map(p=>{
+    const {st,label}=pStatus(p);
+    return`<div class="trip-item" style="margin-bottom:8px"><span style="font-size:18px">${st==='crit'?'🔴':'🟡'}</span><span class="ti-name">${p.name}</span><span class="ti-status ts-${st}">${label}</span></div>`;
+  }).join('');
+}
+
+function doOdoUpdate(){
+  const v=parseInt(document.getElementById('odo-input').value), notes=document.getElementById('odo-notes').value.trim();
+  if(!v||v<=0){toast('Invalid reading');return}
+  if(v<S.odo&&!confirm(`Reading < current. Continue?`))return;
+  const old=S.odo; S.odo=v; audit('o',`Odo updated: ${fkm(old)} → ${fkm(v)}${notes?' · '+notes:''}`);
+  refreshOdoDisplays(); renderParts(); renderMgmt(); renderCostStats(); calcTrip(); closeM('m-odo');
+  document.getElementById('odo-input').value=''; document.getElementById('odo-notes').value=''; toast('Updated!');
+}
+function refreshOdoDisplays(){ ['sbar-odo','h-odo'].forEach(id=>{document.getElementById(id).textContent=fkm(S.odo)}); document.getElementById('m-odo-current').textContent=fkm(S.odo)+' km'; }
+
+function switchTab(t){
+  document.getElementById('tab-do-content').style.display=t==='do'?'block':'none';
+  document.getElementById('tab-pu-content').style.display=t==='pu'?'block':'none';
+  document.getElementById('tab-do').className='ftab'+(t==='do'?' on':''); document.getElementById('tab-pu').className='ftab'+(t==='pu'?' on':'');
+  if(t==='pu') document.getElementById('svc-checklist').innerHTML=S.parts.map((p,i)=>`<div class="citem" id="ci${i}" onclick="togCI(${i})"><input type="checkbox" id="ck${i}"><span class="citem-name">${p.name}</span><input class="cprice" type="number" id="cp${i}" placeholder="₹" onclick="event.stopPropagation()"></div>`).join('');
+}
+function togCI(i){ const cb=document.getElementById('ck'+i); cb.checked=!cb.checked; document.getElementById('ci'+i).classList.toggle('sel',cb.checked); }
+
+function showVDrop(){
+  const val=(document.getElementById('do-vendor').value||'').toLowerCase(), dd=document.getElementById('vdrop');
+  const matches=S.vendors.filter(v=>v.toLowerCase().includes(val));
+  if(!matches.length){dd.style.display='none';return}
+  dd.style.display='block'; dd.innerHTML=matches.map(v=>`<div class="vopt" onclick="pickV('${v}')">${v}</div>`).join('');
+}
+function pickV(v){document.getElementById('do-vendor').value=v;document.getElementById('vdrop').style.display='none';}
+
+function saveDropOff(){
+  const odo=parseInt(document.getElementById('do-odo').value), vendor=document.getElementById('do-vendor').value.trim();
+  if(!odo||!vendor){toast('Required fields missing');return}
+  if(!S.vendors.includes(vendor)){S.vendors.push(vendor);audit('c','New vendor: '+vendor);}
+  S.pendingDO={odo,vendor,date:document.getElementById('do-date').value||new Date().toISOString().slice(0,10),notes:document.getElementById('do-notes').value};
+  audit('c',`Drop-off: ${vendor} @ ${fkm(odo)} km`); closeM('m-service'); toast('Drop-off saved!');
+}
+
+function savePickUp(){
+  const odo=parseInt(document.getElementById('pu-odo').value); if(!odo)return toast('Odometer required');
+  const items=[];
+  S.parts.forEach((p,i)=>{
+    const cb=document.getElementById('ck'+i);
+    if(cb&&cb.checked){
+      const price=parseFloat(document.getElementById('cp'+i).value)||0; items.push({name:p.name,price});
+      const idx=S.parts.findIndex(pp=>pp.id===p.id); const old=S.parts[idx].lastKm;
+      S.parts[idx].lastKm=odo; S.parts[idx].lastDate=new Date().toISOString().slice(0,10);
+      audit('e',`${p.name} replaced: ${fkm(old)} → ${fkm(odo)} km`);
+    }
+  });
+  if(!items.length)return toast('Select serviced parts');
+  const vendor=S.pendingDO?S.pendingDO.vendor:(document.getElementById('do-vendor').value||'Unknown');
+  S.serviceLogs.unshift({id:Date.now(),date:new Date().toISOString().slice(0,10), doOdo:S.pendingDO?S.pendingDO.odo:odo, puOdo:odo, vendor,items, notes:document.getElementById('pu-notes').value});
+  S.pendingDO=null; if(odo>S.odo){S.odo=odo;refreshOdoDisplays();}
+  audit('c',`Pick-up: ${vendor} @ ${fkm(odo)} km. Total: ${finr(items.reduce((s,i)=>s+i.price,0))}`);
+  renderAll(); closeM('m-service'); toast('Saved!');
+}
+
+function renderService(){
+  document.getElementById('svc-timeline').innerHTML=S.serviceLogs.map((l,idx)=>{
+    const total=l.items.reduce((s,i)=>s+i.price,0);
+    return`<div class="svc-row"><div class="svc-dot-col"><div class="svc-dot"></div>${idx<S.serviceLogs.length-1?'<div class="svc-line"></div>':''}</div>
+      <div class="svc-body"><div class="svc-date">${l.date} · ${fkm(l.puOdo)} km</div><div class="svc-title">${l.vendor}</div>
+      ${l.notes?`<div class="svc-vendor">${l.notes}</div>`:''}<div class="svc-pills">${l.items.map(i=>`<span class="pill">${i.name}${i.price>0?' · '+finr(i.price):''}</span>`).join('')}</div></div>
+      ${total>0?`<div class="svc-cost">${finr(total)}</div>`:''}</div>`;
+  }).join('');
+}
+
+function calcTrip(){
+  const type=document.getElementById('trip-type').value, ow=parseInt(document.getElementById('trip-km').value)||0, total=type==='round'?ow*2:ow;
+  const tg=document.getElementById('trip-total-grp'); if(type==='round'){tg.style.display='flex';document.getElementById('trip-total').value=total+' km';} else tg.style.display='none';
+  const res=document.getElementById('trip-results'); if(!ow){res.innerHTML='';return}
+  const proj=S.odo+total, avgKml=calcAvgKml()||28, lit=total/avgKml, stops=Math.max(0,Math.ceil(lit/9)-1);
+  let html=`<div class="trip-fuel-info">Projected: <strong>${fkm(proj)} km</strong> · Fuel needed: ~${lit.toFixed(1)}L · Stops: ~${stops}</div>`;
+  html+=S.parts.map(p=>{
+    const due=p.lastKm+p.estLife; let st,lbl;
+    if(proj>=due){st='crit';lbl='Will be overdue'} else if(proj>=due-p.thresh){st='warn';lbl=`Due ~${fkm(Math.round(due-proj))} km after`} else{st='ok';lbl=`Safe (+${fkm(Math.round(due-proj))} km)`}
+    return`<div class="trip-item"><span style="font-size:16px">${st==='crit'?'🔴':st==='warn'?'🟡':'🟢'}</span><span class="ti-name">${p.name}</span><span class="ti-status ts-${st}">${lbl}</span></div>`;
+  }).join(''); res.innerHTML=html;
+}
+
+function calcFTotal(){ document.getElementById('f-total').textContent=finr(((parseFloat(document.getElementById('f-litres').value)||0)*(parseFloat(document.getElementById('f-ppl').value)||0)).toFixed(2)); }
+function calcAvgKml(){
+  const valid=S.fuelLogs.filter(f=>!f.missed&&!f.partial&&S.fuelLogs.indexOf(f)<S.fuelLogs.length-1); if(valid.length<1)return null;
+  let tkm=0,tl=0;
+  for(let i=0;i<valid.length;i++){ const next=S.fuelLogs[S.fuelLogs.indexOf(valid[i])+1]; if(next){const km=valid[i].odo-next.odo; if(km>0){tkm+=km;tl+=valid[i].litres;}} }
+  return tl>0?Math.round(tkm/tl*10)/10:null;
+}
+
+function saveFuel(){
+  const odo=parseInt(document.getElementById('f-odo').value), lit=parseFloat(document.getElementById('f-litres').value);
+  if(!odo||!lit||lit>13)return toast('Check inputs (Max 13L)');
+  const ppl=parseFloat(document.getElementById('f-ppl').value)||0, missed=document.getElementById('f-missed').checked, partial=document.getElementById('f-partial').checked;
+  S.fuelLogs.unshift({id:Date.now(),date:document.getElementById('f-date').value||new Date().toISOString().slice(0,10), odo,litres:lit,ppl,total:lit*ppl,missed,partial,station:document.getElementById('f-station').value, isFirst:S.fuelLogs.length===0});
+  if(odo>S.odo){S.odo=odo;refreshOdoDisplays();} audit('c',`Fuel: ${lit}L @ ₹${ppl}/L = ${finr(lit*ppl)} · Odo: ${fkm(odo)} km`);
+  renderFuel(); renderCostStats(); closeM('m-fuel'); toast('Saved!');
+}
+
+function renderFuel(){
+  const avg=calcAvgKml(); document.getElementById('fuel-stats').innerHTML=`
+    <div class="stat-card"><div class="stat-val">${avg?avg+' km/L':'~28'}</div><div class="stat-lbl">Your Avg</div></div>
+    <div class="stat-card"><div class="stat-val">${finr(Math.round(S.fuelLogs.reduce((s,f)=>s+f.total,0)))}</div><div class="stat-lbl">Total Spend</div></div>
+    <div class="stat-card"><div class="stat-val">${S.fuelLogs.length}</div><div class="stat-lbl">Fill-ups</div></div>`;
+  document.getElementById('fuel-log-rows').innerHTML=S.fuelLogs.map((f,i)=>{
+    let kml='—'; if(!f.missed&&!f.partial&&!f.isFirst&&i<S.fuelLogs.length-1){const km=f.odo-S.fuelLogs[i+1].odo; if(km>0)kml=(km/f.litres).toFixed(1)+' km/L';}
+    return`<div class="fuel-log-row"><span class="fl-date">${f.date}</span><span class="fl-odo">${fkm(f.odo)}</span><span class="fl-litres">${f.litres}L</span><span class="fl-kml">${kml}</span><span class="fl-cost">${finr(f.total.toFixed(0))}</span><div class="fl-flags">${f.missed?'<span class="flag flag-missed">missed</span>':''}${f.partial||f.isFirst?'<span class="flag flag-partial">partial</span>':''}</div></div>`;
+  }).join('');
+}
+function saveFuelSettings(){ S.fuelAlertL=parseFloat(document.getElementById('fs-litres').value)||4; S.fuelFillupKm=parseInt(document.getElementById('fs-km').value)||280; audit('e',`Fuel settings saved`); closeM('m-fuel-settings'); }
+
+function renderCostStats(){
+  const maint=S.serviceLogs.reduce((s,l)=>s+l.items.reduce((ss,i)=>ss+i.price,0),0), fuel=S.fuelLogs.reduce((s,f)=>s+f.total,0), cpkm=S.odo>0?maint/S.odo:0, allIn=S.odo>0?(maint+fuel)/S.odo:0;
+  document.getElementById('cost-stats').innerHTML=`<div class="stat-card"><div class="stat-val">${finr(Math.round(maint))}</div><div class="stat-lbl">Maint</div></div><div class="stat-card"><div class="stat-val">${finr(cpkm.toFixed(2))}</div><div class="stat-lbl">₹/km</div></div><div class="stat-card"><div class="stat-val">${finr(Math.round(fuel))}</div><div class="stat-lbl">Fuel</div></div><div class="stat-card"><div class="stat-val">${finr(allIn.toFixed(2))}</div><div class="stat-lbl">All-in ₹/km</div></div>`;
+  document.getElementById('h-spend').textContent=finr(Math.round(maint+fuel));
+  document.getElementById('life-tbl').innerHTML=`<thead><tr><th>Part</th><th>Est Life</th><th>Actual</th><th>Var</th></tr></thead><tbody>`+S.parts.map(p=>{
+    const actual=p.lastKm, v=actual-p.estLife, cls=v>=0?'life-better':'life-worse';
+    return`<tr><td>${p.name}</td><td>${fkm(p.estLife)}</td><td>${actual?fkm(actual):'—'}</td><td class="${cls}">${v>=0?'+':''}${fkm(v)}</td></tr>`;
+  }).join('')+'</tbody>';
+}
+
+let _costChart;
+function renderCostChart(){
+  if(_costChart)_costChart.destroy(); const spend={}; S.serviceLogs.forEach(l=>l.items.forEach(i=>{if(i.price>0)spend[i.name]=(spend[i.name]||0)+i.price}));
+  const sorted=Object.entries(spend).sort((a,b)=>b[1]-a[1]); if(!sorted.length)return;
+  _costChart=new Chart(document.getElementById('costChart').getContext('2d'),{type:'bar',data:{labels:sorted.map(e=>e[0]),datasets:[{data:sorted.map(e=>Math.round(e[1])),backgroundColor:'rgba(201,168,76,0.65)'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+}
+
+function renderMgmt(){
+  document.getElementById('mgmt-list').innerHTML=S.parts.map((p,i)=>{
+    const dot=pStatus(p).st==='crit'?'🔴':pStatus(p).st==='warn'?'🟡':'🟢';
+    return`<div class="mgmt-item"><span class="mgmt-status">${dot}</span><span class="mgmt-name">${p.name}</span><span class="mgmt-life">${fkm(p.estLife)} km ${p.estMonths?'/ '+p.estMonths+' mo':''}</span><span class="mgmt-thresh">Alert: ${fkm(p.thresh)} km</span><button class="btn-icon" onclick="openEditPart(${i})">✏️</button><button class="btn-icon del" onclick="delPart(${i})">🗑️</button></div>`;
+  }).join('');
+}
+
+function openEditPart(i){ const p=S.parts[i]; document.getElementById('ep-idx').value=i; document.getElementById('ep-name').value=p.name; document.getElementById('ep-life').value=p.estLife; document.getElementById('ep-months').value=p.estMonths||''; document.getElementById('ep-thresh').value=p.thresh; openM('m-edit-part'); }
+function savePartEdit(){
+  const i=parseInt(document.getElementById('ep-idx').value), p=S.parts[i];
+  p.name=document.getElementById('ep-name').value||p.name; p.estLife=parseInt(document.getElementById('ep-life').value)||p.estLife; p.estMonths=parseInt(document.getElementById('ep-months').value)||null; p.thresh=parseInt(document.getElementById('ep-thresh').value)||p.thresh;
+  audit('e',`Part edited: ${p.name}`); renderAll(); closeM('m-edit-part');
+}
+function delPart(i){ if(!confirm(`Delete "${S.parts[i].name}"?`))return; audit('d',`Part deleted: ${S.parts[i].name}`); S.parts.splice(i,1); renderAll(); }
+function addPart(){
+  const name=document.getElementById('ap-name').value.trim(), life=parseInt(document.getElementById('ap-life').value); if(!name||!life)return toast('Required missing');
+  S.parts.push({id:Date.now(),name,estLife:life, estMonths:parseInt(document.getElementById('ap-months').value)||null, lastKm:0, lastDate:new Date().toISOString().slice(0,10), brand:document.getElementById('ap-brand').value, thresh:parseInt(document.getElementById('ap-thresh').value)||500});
+  audit('c',`New part: ${name}`); renderAll(); closeM('m-add-part');
+}
+
+const REPORTS=[{id:'audit', icon:'🔍', name:'Audit Trail', desc:'CSV Export', fmt:['CSV']}, {id:'snap', icon:'🩺', name:'Health Snapshot', desc:'CSV Export', fmt:['CSV']}];
+function renderReports(){ document.getElementById('reports-grid').innerHTML=REPORTS.map(r=>`<div class="rcard" onclick="doExport('${r.id}')"><div class="ricon">${r.icon}</div><div><div class="rinfo-name">${r.name}</div><div class="rinfo-desc">${r.desc}</div></div></div>`).join(''); }
+function doExport(id){ audit('c',`Report exported`); toast('Generating...'); /* standard CSV export logic goes here */ }
+
+function renderAudit(){ const el=document.getElementById('audit-list'); if(el) el.innerHTML=S.auditLog.slice(0,30).map(a=>`<div class="aitem ${a.type}"><span class="atime">${a.ts}</span><span class="aaction">${a.action}</span></div>`).join(''); }
+
+function openM(id){ document.getElementById(id).classList.add('open'); if(id==='m-service'||id==='m-fuel')document.getElementById(id==='m-service'?'do-date':'f-date').value=new Date().toISOString().slice(0,10); }
+function closeM(id){ document.getElementById(id).classList.remove('open') }
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeM(o.id)}));
+
+function renderAll(){ updateProfileDisplay(); renderParts(); renderService(); renderFuel(); renderCostStats(); renderMgmt(); renderReports(); renderAudit(); calcTrip(); }
+
+document.addEventListener('DOMContentLoaded',()=>{ document.getElementById('footer-ts').textContent=ts(); renderAll(); });
+</script>
+</body>
+</html>

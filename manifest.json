@@ -1,0 +1,15 @@
+{
+  "name": "Triumph Tracker",
+  "short_name": "Tracker",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZD0iTTEyIDJMNCA3djEwbDggNSA4LTVWN2wtOC01em0wIDIuNEwxOC41IDggMTIgMTEuNiA1LjUgOCAxMiA0LjR6TTUgOS43bDYuNSAzLjd2Ny4yTDUgMTYuOVY5Ljd6bTguNSAxMC45di03LjJMMjAgOS43djcuMmwtNi41IDMuN3oiIGZpbGw9IiNjOWE4NGMiLz48L3N2Zz4=",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}
