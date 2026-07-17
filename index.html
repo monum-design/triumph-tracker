@@ -274,7 +274,6 @@ input,select,textarea{font-family:inherit;font-size:14px}
   .mgmt-status { display: none; }
   .mgmt-name { font-size: 15px; }
   .mgmt-thresh { text-align: left; margin-bottom: 8px; }
-  .mgmt-item button { align-self: flex-end; margin-top: -30px; }
 }
 </style>
 </head>
@@ -644,6 +643,18 @@ async function loadFromDrive() {
 async function saveToDrive() {
   if (!gapiInited || !gapi.client.getToken()) return;
   toast('Saving to Cloud...');
+
+  // FIX: Force a search for the exact file to prevent duplicates
+  if (!driveFileId) {
+    const res = await gapi.client.drive.files.list({
+      q: "name='triumph_speed400_data.json' and trashed=false",
+      fields: 'files(id)', spaces: 'drive'
+    });
+    if (res.result.files && res.result.files.length > 0) {
+      driveFileId = res.result.files[0].id;
+    }
+  }
+
   const fileContent = JSON.stringify(S);
   const file = new Blob([fileContent], {type: 'application/json'});
   const metadata = { 'name': 'triumph_speed400_data.json', 'mimeType': 'application/json' };
@@ -672,11 +683,13 @@ async function saveToDrive() {
 
 function persistLocal() {
   localStorage.setItem('triumph_data', JSON.stringify(S));
+  localStorage.setItem('triumph_unsaved', 'true'); // Locks the unsaved flag in memory
   unsavedChanges = true;
   const btn = document.getElementById('auth-btn');
   btn.textContent = 'Sync Needed'; btn.style.color = 'var(--gold)'; btn.style.borderColor = 'var(--gold)';
 }
 function markSynced() {
+  localStorage.removeItem('triumph_unsaved'); // Clears the flag after successful upload
   unsavedChanges = false;
   const btn = document.getElementById('auth-btn');
   btn.textContent = 'Drive Synced'; btn.style.color = 'var(--green)'; btn.style.borderColor = 'transparent';
@@ -712,12 +725,18 @@ let S = {
 // Boot from LocalStorage
 const localData = localStorage.getItem('triumph_data');
 if(localData) { S = JSON.parse(localData); }
+if(localStorage.getItem('triumph_unsaved') === 'true') { unsavedChanges = true; }
 
 // ── HELPERS ──────────────────────────────────────────
 function ts(){ return new Date().toLocaleString('en-IN',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}); }
 function fkm(n){ return Number(n).toLocaleString('en-IN') }
 function finr(n){ return '₹'+Number(n).toLocaleString('en-IN',{minimumFractionDigits:0,maximumFractionDigits:2}) }
-function audit(type,action){ S.auditLog.unshift({ts:ts(),type,action}); renderAudit(); persistLocal(); }
+// FIX 4: Implemented a garbage collector to cap logs at 200 to prevent LocalStorage Quota crashes
+function audit(type,action){ 
+  S.auditLog.unshift({ts:ts(),type,action}); 
+  if(S.auditLog.length > 200) S.auditLog.length = 200; 
+  renderAudit(); persistLocal(); 
+}
 
 // Bug 2 Fix & Dual-Trigger Check
 function pStatus(p){
@@ -787,9 +806,11 @@ function handleProfPic(e) {
 }
 
 function saveProfile() {
-  S.profile.name = document.getElementById('prof-name').value;
-  S.purchaseDate = document.getElementById('prof-purch').value;
-  S.deliveryDate = document.getElementById('prof-del').value;
+  // FIX: Added fallbacks (||) so empty fields don't cause NaN math errors
+  S.profile.name = document.getElementById('prof-name').value || 'Monu M';
+  const fallbackDate = new Date().toISOString().slice(0,10);
+  S.purchaseDate = document.getElementById('prof-purch').value || fallbackDate;
+  S.deliveryDate = document.getElementById('prof-del').value || fallbackDate;
   updateProfileDisplay(); closeM('m-profile'); audit('e', 'Profile updated');
 }
 
@@ -877,8 +898,14 @@ function refreshOdoDisplays(){ ['sbar-odo','h-odo'].forEach(id=>{document.getEle
 function switchTab(t){
   document.getElementById('tab-do-content').style.display=t==='do'?'block':'none';
   document.getElementById('tab-pu-content').style.display=t==='pu'?'block':'none';
-  document.getElementById('tab-do').className='ftab'+(t==='do'?' on':''); document.getElementById('tab-pu').className='ftab'+(t==='pu'?' on':'');
-  if(t==='pu') document.getElementById('svc-checklist').innerHTML=S.parts.map((p,i)=>`<div class="citem" id="ci${i}" onclick="togCI(${i})"><input type="checkbox" id="ck${i}"><span class="citem-name">${p.name}</span><input class="cprice" type="number" id="cp${i}" placeholder="₹" onclick="event.stopPropagation()"></div>`).join('');
+  document.getElementById('tab-do').className='ftab'+(t==='do'?' on':''); 
+  document.getElementById('tab-pu').className='ftab'+(t==='pu'?' on':'');
+  
+const cl = document.getElementById('svc-checklist');
+  // FIX 3: Removed the empty HTML check. This forces a fresh DOM render every time.
+  if(t==='pu') {
+    cl.innerHTML=S.parts.map((p,i)=>`<div class="citem" id="ci${i}" onclick="togCI(${i})"><input type="checkbox" id="ck${i}"><span class="citem-name">${p.name}</span><input class="cprice" type="number" id="cp${i}" placeholder="₹" onclick="event.stopPropagation()"></div>`).join('');
+  }
 }
 function togCI(i){ const cb=document.getElementById('ck'+i); cb.checked=!cb.checked; document.getElementById('ci'+i).classList.toggle('sel',cb.checked); }
 function showVDrop(){
@@ -888,11 +915,17 @@ function showVDrop(){
   dd.style.display='block'; dd.innerHTML=matches.map(v=>`<div class="vopt" onclick="pickV('${v}')">${v}</div>`).join('');
 }
 function pickV(v){document.getElementById('do-vendor').value=v;document.getElementById('vdrop').style.display='none';}
-
+// FIX: Close vendor dropdown instantly if the user clicks anywhere else on the screen
+document.addEventListener('click', e => { if(!e.target.closest('.vendor-wrap')) { const vd = document.getElementById('vdrop'); if(vd) vd.style.display='none'; }});
 // ── DYNAMIC USEFUL LIFE MATH ─────────────────────────
 function saveDropOff(){
   const odo=parseInt(document.getElementById('do-odo').value), vendor=document.getElementById('do-vendor').value.trim();
   if(!odo||!vendor){toast('Required fields missing');return}
+  
+  // FIX: Added missing Sanity Checks to Phase 1
+  if(odo < S.odo && !confirm(`Drop-off Odo (${fkm(odo)}) is less than current (${fkm(S.odo)}). Is this correct?`)) return;
+  if(odo > (S.odo + 2000) && !confirm(`WARNING: You entered ${fkm(odo)} km. Are you sure this is correct?`)) return;
+  
   if(!S.vendors.includes(vendor)){S.vendors.push(vendor);audit('c','New vendor: '+vendor);}
   S.pendingDO={odo,vendor,date:document.getElementById('do-date').value||new Date().toISOString().slice(0,10),notes:document.getElementById('do-notes').value};
   audit('c',`Drop-off: ${vendor} @ ${fkm(odo)} km`); closeM('m-service'); toast('Drop-off saved!');
@@ -900,11 +933,19 @@ function saveDropOff(){
 
 function savePickUp(){
   const odo=parseInt(document.getElementById('pu-odo').value); if(!odo)return toast('Odometer required');
+if(S.pendingDO && odo < S.pendingDO.odo) return toast('Error: Pick-up Odo cannot be less than Drop-off Odo');
+  if(odo < S.odo && !confirm(`Pick-up Odo (${fkm(odo)}) is less than current (${fkm(S.odo)}). Is this correct?`)) return;
+if(odo > (S.odo + 2000) && !confirm(`WARNING: You entered ${fkm(odo)} km. Are you sure this is correct?`)) return;
   const items=[];
-  S.parts.forEach((p,i)=>{
+S.parts.forEach((p,i)=>{
     const cb=document.getElementById('ck'+i);
-    if(cb&&cb.checked){
-      const price=parseFloat(document.getElementById('cp'+i).value)||0; items.push({name:p.name,price});
+    const priceVal = parseFloat(document.getElementById('cp'+i).value);
+    // Logic: If user entered a price but forgot the checkbox, auto-check it.
+    if(cb && (!cb.checked && !isNaN(priceVal))) cb.checked = true;
+    
+    if(cb && cb.checked){
+      const price = priceVal || 0;
+      items.push({name:p.name,price});
       const idx=S.parts.findIndex(pp=>pp.id===p.id); 
       const old=S.parts[idx].lastKm;
       const actualLifeRun = odo - old;
@@ -923,8 +964,16 @@ function savePickUp(){
       audit('e',`${p.name} replaced: ${fkm(old)} → ${fkm(odo)} km`);
     }
   });
-  if(!items.length)return toast('Select serviced parts');
-  const vendor=S.pendingDO?S.pendingDO.vendor:(document.getElementById('do-vendor').value||'Unknown');
+if(!items.length)return toast('Select serviced parts');
+  
+  // FIX 2: Intercept direct Pick-Up logs and force vendor entry
+  let vendor = S.pendingDO ? S.pendingDO.vendor : document.getElementById('do-vendor').value.trim();
+  if(!vendor) {
+    vendor = prompt("Skipped Drop-off Phase detected. Enter Mechanic/Vendor name for this service:");
+    if(!vendor) return toast('Vendor is required to log service.');
+    if(!S.vendors.includes(vendor)){ S.vendors.push(vendor); audit('c','New vendor: '+vendor); }
+  }
+
   S.serviceLogs.unshift({id:Date.now(),date:new Date().toISOString().slice(0,10), doOdo:S.pendingDO?S.pendingDO.odo:odo, puOdo:odo, vendor,items, notes:document.getElementById('pu-notes').value});
   S.pendingDO=null; if(odo>S.odo){S.odo=odo;refreshOdoDisplays();}
   audit('c',`Pick-up: ${vendor} @ ${fkm(odo)} km. Total: ${finr(items.reduce((s,i)=>s+i.price,0))}`);
@@ -932,9 +981,10 @@ function savePickUp(){
 }
 
 function renderService(){
-  document.getElementById('svc-timeline').innerHTML=S.serviceLogs.map((l,idx)=>{
+  const sortedLogs = [...S.serviceLogs].sort((a,b)=> b.puOdo - a.puOdo);
+  document.getElementById('svc-timeline').innerHTML=sortedLogs.map((l,idx)=>{
     const total=l.items.reduce((s,i)=>s+i.price,0);
-    return`<div class="svc-row"><div class="svc-dot-col"><div class="svc-dot"></div>${idx<S.serviceLogs.length-1?'<div class="svc-line"></div>':''}</div>
+    return`<div class="svc-row"><div class="svc-dot-col"><div class="svc-dot"></div>${idx<sortedLogs.length-1?'<div class="svc-line"></div>':''}</div>
       <div class="svc-body"><div class="svc-date">${l.date} · ${fkm(l.puOdo)} km</div><div class="svc-title">${l.vendor}</div>
       ${l.notes?`<div class="svc-vendor">${l.notes}</div>`:''}<div class="svc-pills">${l.items.map(i=>`<span class="pill">${i.name}${i.price>0?' · '+finr(i.price):''}</span>`).join('')}</div></div>
       ${total>0?`<div class="svc-cost">${finr(total)}</div>`:''}</div>`;
@@ -945,7 +995,8 @@ function renderService(){
 function calcAvgKml(){
   // Sort strictly by Odometer to prevent buggy negative math if receipt entered late
   const sorted = [...S.fuelLogs].sort((a,b)=>b.odo - a.odo);
-  const valid=sorted.filter(f=>!f.missed&&!f.partial&&sorted.indexOf(f)<sorted.length-1); if(valid.length<1)return null;
+  // FIX: Using the native index parameter prevents an O(N^2) memory loop crash
+  const valid=sorted.filter((f, index)=>!f.missed&&!f.partial&&index<sorted.length-1); if(valid.length<1)return null;
   let tkm=0,tl=0;
   for(let i=0;i<valid.length;i++){ const next=sorted[sorted.indexOf(valid[i])+1]; if(next){const km=valid[i].odo-next.odo; if(km>0){tkm+=km;tl+=valid[i].litres;}} }
   return tl>0?Math.round(tkm/tl*10)/10:null;
@@ -954,6 +1005,10 @@ function calcFTotal(){ document.getElementById('f-total').textContent=finr(((par
 function saveFuel(){
   const odo=parseInt(document.getElementById('f-odo').value), lit=parseFloat(document.getElementById('f-litres').value);
   if(!odo||!lit||lit>13)return toast('Check inputs (Max 13L)');
+  // Security Check: Ensure fuel odometer is logical
+  const lastFuel = S.fuelLogs.length ? S.fuelLogs[0].odo : 0;
+  if(odo < lastFuel && !confirm(`This odometer (${fkm(odo)}) is lower than your last log (${fkm(lastFuel)}). Continue?`)) return;
+  if(odo > (S.odo + 2000) && !confirm(`WARNING: You entered ${fkm(odo)} km, which is a massive jump. Is this a typo?`)) return;
   const ppl=parseFloat(document.getElementById('f-ppl').value)||0, missed=document.getElementById('f-missed').checked, partial=document.getElementById('f-partial').checked;
   S.fuelLogs.unshift({id:Date.now(),date:document.getElementById('f-date').value||new Date().toISOString().slice(0,10), odo,litres:lit,ppl,total:lit*ppl,missed,partial,station:document.getElementById('f-station').value, isFirst:S.fuelLogs.length===0});
   if(odo>S.odo){S.odo=odo;refreshOdoDisplays();} audit('c',`Fuel: ${lit}L @ ₹${ppl}/L = ${finr(lit*ppl)} · Odo: ${fkm(odo)} km`);
@@ -961,7 +1016,12 @@ function saveFuel(){
 }
 
 function renderFuel(){
-  const avg=calcAvgKml(); document.getElementById('fuel-stats').innerHTML=`
+  const avg=calcAvgKml(); 
+  const range = avg ? Math.round(S.fuelAlertL * avg) : Math.round(S.fuelAlertL * 28);
+  const headerSub = document.querySelector('#fuel-section .sec-sub');
+  if(headerSub) headerSub.innerHTML = `13L tank · Alert at ${S.fuelAlertL}L remaining (~${range} km range)`;
+
+  document.getElementById('fuel-stats').innerHTML=`
     <div class="stat-card"><div class="stat-val">${avg?avg+' km/L':'~28'}</div><div class="stat-lbl">Your Avg</div></div>
     <div class="stat-card"><div class="stat-val">${finr(Math.round(S.fuelLogs.reduce((s,f)=>s+f.total,0)))}</div><div class="stat-lbl">Total Spend</div></div>
     <div class="stat-card"><div class="stat-val">${S.fuelLogs.length}</div><div class="stat-lbl">Fill-ups</div></div>`;
@@ -974,10 +1034,16 @@ function renderFuel(){
 function saveFuelSettings(){ S.fuelAlertL=parseFloat(document.getElementById('fs-litres').value)||4; S.fuelFillupKm=parseInt(document.getElementById('fs-km').value)||280; audit('e',`Fuel settings saved`); closeM('m-fuel-settings'); }
 
 function renderCostStats(){
-  const maint=S.serviceLogs.reduce((s,l)=>s+l.items.reduce((ss,i)=>ss+i.price,0),0), fuel=S.fuelLogs.reduce((s,f)=>s+f.total,0), cpkm=S.odo>0?maint/S.odo:0, allIn=S.odo>0?(maint+fuel)/S.odo:0;
+  const maint=S.serviceLogs.reduce((s,l)=>s+l.items.reduce((ss,i)=>ss+i.price,0),0), fuel=S.fuelLogs.reduce((s,f)=>s+f.total,0);
+  
+  // FIX: Calculate true tracked distance so CPK is mathematically accurate
+  const allOdos = [...S.serviceLogs.map(l=>l.puOdo), ...S.fuelLogs.map(f=>f.odo)];
+  const startOdo = allOdos.length ? Math.min(...allOdos) : 0;
+  const trackedKm = Math.max(1, S.odo - startOdo); // Max 1 prevents division by zero crash
+  const cpkm = maint/trackedKm, allIn = (maint+fuel)/trackedKm;
+
   document.getElementById('cost-stats').innerHTML=`<div class="stat-card"><div class="stat-val">${finr(Math.round(maint))}</div><div class="stat-lbl">Maint</div></div><div class="stat-card"><div class="stat-val">${finr(cpkm.toFixed(2))}</div><div class="stat-lbl">₹/km</div></div><div class="stat-card"><div class="stat-val">${finr(Math.round(fuel))}</div><div class="stat-lbl">Fuel</div></div><div class="stat-card"><div class="stat-val">${finr(allIn.toFixed(2))}</div><div class="stat-lbl">All-in ₹/km</div></div>`;
-  document.getElementById('h-spend').textContent=finr(Math.round(maint+fuel));
-  document.getElementById('life-tbl').innerHTML=`<thead><tr><th>Part</th><th>Master Life</th><th>Dynamic Life</th><th>Variance</th></tr></thead><tbody>`+S.parts.map(p=>{
+  document.getElementById('h-spend').textContent=finr(Math.round(maint+fuel));  document.getElementById('life-tbl').innerHTML=`<thead><tr><th>Part</th><th>Master Life</th><th>Dynamic Life</th><th>Variance</th></tr></thead><tbody>`+S.parts.map(p=>{
     const v= (p.dynamicLife||p.estLife) - p.estLife, cls=v>=0?'life-better':'life-worse';
     return`<tr><td>${p.name}</td><td>${fkm(p.estLife)}</td><td>${p.dynamicLife?fkm(p.dynamicLife):'—'}</td><td class="${cls}">${v>0?'+':''}${v!==0?fkm(v):'—'}</td></tr>`;
   }).join('')+'</tbody>';
@@ -995,23 +1061,38 @@ function renderCostChart(){
 function renderMgmt(){
   document.getElementById('mgmt-list').innerHTML=S.parts.map((p,i)=>{
     const dot=pStatus(p).st==='crit'?'🔴':pStatus(p).st==='warn'?'🟡':'🟢';
-    return`<div class="mgmt-item"><span class="mgmt-status">${dot}</span><span class="mgmt-name">${p.name} ${p.dynamicLife?'⭐':''}</span><span class="mgmt-life">Base: ${fkm(p.estLife)} | Dyn: ${p.dynamicLife?fkm(p.dynamicLife):'--'}</span><span class="mgmt-thresh">Alert: ${fkm(p.thresh)} km</span><button class="btn-icon" onclick="openEditPart(${i})">✏️</button><button class="btn-icon del" onclick="delPart(${i})">🗑️</button></div>`;
+    return`<div class="mgmt-item"><span class="mgmt-status">${dot}</span><span class="mgmt-name">${p.name} ${p.dynamicLife?'⭐':''}</span><span class="mgmt-life">Base: ${fkm(p.estLife)} | Dyn: ${p.dynamicLife?fkm(p.dynamicLife):'--'}</span><span class="mgmt-thresh">Alert: ${fkm(p.thresh)} km</span><div style="margin-left:auto; display:flex; gap:4px;"><button class="btn-icon" onclick="openEditPart(${i})">✏️</button><button class="btn-icon del" onclick="delPart(${i})">🗑️</button></div></div>`;
   }).join('');
 }
 function openEditPart(i){ const p=S.parts[i]; document.getElementById('ep-idx').value=i; document.getElementById('ep-name').value=p.name; document.getElementById('ep-life').value=p.estLife; document.getElementById('ep-months').value=p.estMonths||''; document.getElementById('ep-thresh').value=p.thresh; openM('m-edit-part'); }
 function savePartEdit(){
   const i=parseInt(document.getElementById('ep-idx').value), p=S.parts[i];
-  p.name=document.getElementById('ep-name').value||p.name; p.estLife=parseInt(document.getElementById('ep-life').value)||p.estLife; p.estMonths=parseInt(document.getElementById('ep-months').value)||null; p.thresh=parseInt(document.getElementById('ep-thresh').value)||p.thresh;
+  const oldName = p.name;
+  p.name = document.getElementById('ep-name').value.trim() || p.name; 
+  
+  if (p.name !== oldName) {
+    S.serviceLogs.forEach(l => l.items.forEach(item => { if (item.name === oldName) item.name = p.name; }));
+  }
+
+  const newLife = parseInt(document.getElementById('ep-life').value) || p.estLife;
+  if(newLife !== p.estLife) p.dynamicLife = null; 
+  
+  p.estLife = newLife; 
+  p.estMonths = parseInt(document.getElementById('ep-months').value) || null; 
+  p.thresh = parseInt(document.getElementById('ep-thresh').value) || p.thresh;
+  
   audit('e',`Part edited: ${p.name}`); renderAll(); closeM('m-edit-part');
 }
 function delPart(i){ if(!confirm(`Delete "${S.parts[i].name}"?`))return; audit('d',`Part deleted: ${S.parts[i].name}`); S.parts.splice(i,1); renderAll(); }
 function addPart(){
   const name=document.getElementById('ap-name').value.trim(), life=parseInt(document.getElementById('ap-life').value); if(!name||!life)return toast('Required missing');
-  S.parts.push({id:Date.now(),name,estLife:life, estMonths:parseInt(document.getElementById('ap-months').value)||null, lastKm:0, lastDate:new Date().toISOString().slice(0,10), brand:document.getElementById('ap-brand').value, thresh:parseInt(document.getElementById('ap-thresh').value)||500});
+  // FIX: changed lastKm from 0 to S.odo so new parts don't instantly trigger alerts
+  S.parts.push({id:Date.now(),name,estLife:life, estMonths:parseInt(document.getElementById('ap-months').value)||null, lastKm:S.odo, lastDate:new Date().toISOString().slice(0,10), brand:document.getElementById('ap-brand').value, thresh:parseInt(document.getElementById('ap-thresh').value)||500});
   audit('c',`New part: ${name}`); renderAll(); closeM('m-add-part');
 }
 function calcTrip(){
-  const type=document.getElementById('trip-type').value, ow=parseInt(document.getElementById('trip-km').value)||0, total=type==='round'?ow*2:ow;
+  // FIX: Math.abs forces distance to always be positive, ignoring minus signs.
+  const type=document.getElementById('trip-type').value, ow=Math.abs(parseInt(document.getElementById('trip-km').value))||0, total=type==='round'?ow*2:ow;
   const tg=document.getElementById('trip-total-grp'); if(type==='round'){tg.style.display='flex';document.getElementById('trip-total').value=total+' km';} else tg.style.display='none';
   const res=document.getElementById('trip-results'); if(!ow){res.innerHTML='';return}
   const proj=S.odo+total, avgKml=calcAvgKml()||28, lit=total/avgKml, stops=Math.max(0,Math.ceil(lit/9)-1);
@@ -1052,15 +1133,20 @@ function printReport(id, name) {
   } else if (id === 'svc') {
     body = `<table class="pdf-table"><tr><th>Date</th><th>Odo</th><th>Vendor</th><th>Parts Replaced</th><th>Total (₹)</th></tr>` + S.serviceLogs.map(s=> `<tr><td>${s.date}</td><td>${fkm(s.puOdo)}</td><td>${s.vendor}</td><td>${s.items.map(i=>i.name).join(', ')}</td><td>${finr(s.items.reduce((acc,i)=>acc+i.price,0))}</td></tr>`).join('') + `</table>`;
   } else if (id === 'cost') {
-    const maint=S.serviceLogs.reduce((s,l)=>s+l.items.reduce((ss,i)=>ss+i.price,0),0), fuel=S.fuelLogs.reduce((s,f)=>s+f.total,0), cpkm=S.odo>0?(maint+fuel)/S.odo:0;
-    body = `<div class="pdf-summary-box">All-in Cost Per Km: <strong>${finr(cpkm.toFixed(2))}</strong> | Total Maint: ${finr(maint)} | Total Fuel: ${finr(fuel)}</div>`;
+    const maint=S.serviceLogs.reduce((s,l)=>s+l.items.reduce((ss,i)=>ss+i.price,0),0), fuel=S.fuelLogs.reduce((s,f)=>s+f.total,0);
+    const allOdos = [...S.serviceLogs.map(l=>l.puOdo), ...S.fuelLogs.map(f=>f.odo)];
+    const trackedKm = Math.max(1, S.odo - (allOdos.length ? Math.min(...allOdos) : 0));
+    const cpkm = (maint+fuel)/trackedKm;
+    body = `<div class="pdf-summary-box">All-in Cost Per Km: <strong>${finr(cpkm.toFixed(2))}</strong> | Total Maint: ${finr(maint)} | Total Fuel: ${finr(fuel)} | Tracked Distance: ${fkm(trackedKm)} km</div>`;
   } else if (id === 'audit') {
     body = `<table class="pdf-table"><tr><th>Timestamp</th><th>Action</th></tr>` + S.auditLog.map(a=> `<tr><td>${a.ts}</td><td>${a.action}</td></tr>`).join('') + `</table>`;
   } else if (id === 'var') {
     body = `<table class="pdf-table"><tr><th>Part</th><th>Master Baseline</th><th>Dynamic Usage Avg</th><th>Variance</th></tr>` + S.parts.map(p=> `<tr><td>${p.name}</td><td>${fkm(p.estLife)}</td><td>${p.dynamicLife?fkm(p.dynamicLife):'N/A'}</td><td>${p.dynamicLife?(p.dynamicLife - p.estLife > 0 ? '+'+(p.dynamicLife - p.estLife) : (p.dynamicLife - p.estLife)) : '0'}</td></tr>`).join('') + `</table>`;
-  } else {
-    // Catchall for structural demos
-    body = `<div class="pdf-summary-box">Detailed records being compiled...</div><table class="pdf-table"><tr><th>Data Export</th></tr><tr><td>Raw array mapping for ${name}</td></tr></table>`;
+} else {
+    // FIX: Replaced the dummy stub with an actual data export engine for the remaining 7 reports
+    // FIX: Trip logs are not saved in state, returning a specific empty payload to prevent parts leakage
+    const targetData = id==='fuel'?S.fuelLogs : id==='ven'?S.vendors : id==='trip'? [{"note": "Trip planner is an active calculator. Historical routes are not logged."}] : S.auditLog;
+    body = `<div class="pdf-summary-box">Raw Data Export for: ${name}</div><pre style="font-size:11px; white-space:pre-wrap; word-break:break-all; background:#f9f9f9; padding:15px; border:1px solid #ddd; border-radius:8px;">${JSON.stringify(targetData, null, 2)}</pre>`;
   }
 
   pz.innerHTML = head + body;
@@ -1070,12 +1156,31 @@ function printReport(id, name) {
 }
 
 function renderAudit(){ const el=document.getElementById('audit-list'); if(el) el.innerHTML=S.auditLog.slice(0,30).map(a=>`<div class="aitem ${a.type}"><span class="atime">${a.ts}</span><span class="aaction">${a.action}</span></div>`).join(''); }
-function openM(id){ document.getElementById(id).classList.add('open'); if(id==='m-service'||id==='m-fuel')document.getElementById(id==='m-service'?'do-date':'f-date').value=new Date().toISOString().slice(0,10); }
+function openM(id){ 
+  document.getElementById(id).classList.add('open'); 
+  if(id==='m-service') {
+    document.getElementById('do-date').value = new Date().toISOString().slice(0,10);
+    if(S.pendingDO) {
+      switchTab('pu');
+      toast('Resuming pending service...');
+    } else {
+      switchTab('do');
+    }
+  }
+  if(id==='m-fuel') document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
+}
 function closeM(id){ document.getElementById(id).classList.remove('open') }
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeM(o.id)}));
 function renderAll(){ updateProfileDisplay(); renderParts(); renderService(); renderFuel(); renderCostStats(); renderMgmt(); renderReports(); renderAudit(); calcTrip(); }
 
-document.addEventListener('DOMContentLoaded',()=>{ document.getElementById('footer-ts').textContent=ts(); renderAll(); });
+document.addEventListener('DOMContentLoaded',()=>{ 
+  document.getElementById('footer-ts').textContent=ts(); 
+  if(unsavedChanges) {
+    const btn = document.getElementById('auth-btn');
+    btn.textContent = 'Sync Needed'; btn.style.color = 'var(--gold)'; btn.style.borderColor = 'var(--gold)';
+  }
+  renderAll(); 
+});
 </script>
 </body>
 </html>
