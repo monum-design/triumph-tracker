@@ -614,8 +614,9 @@ function handleAuthClick() {
       await loadFromDrive();
     }
   };
+  // FIX: Removed prompt: 'consent' to stop Google from forcing you to re-approve every time you reload
   if (gapi.client.getToken() === null) {
-    tokenClient.requestAccessToken({prompt: 'consent'});
+    tokenClient.requestAccessToken();
   } else {
     tokenClient.requestAccessToken({prompt: ''});
   }
@@ -626,26 +627,33 @@ async function loadFromDrive() {
   try {
     const res = await gapi.client.drive.files.list({
       q: "name='triumph_speed400_data.json' and trashed=false",
-      fields: 'files(id, name)', spaces: 'drive'
+      fields: 'files(id)', spaces: 'drive'
     });
+    
     if (res.result.files && res.result.files.length > 0) {
       driveFileId = res.result.files[0].id;
       
-      // FIX 1: Use direct fetch with cache-busting (?t=Date.now) and 'no-store' to guarantee fresh mobile data
-      const token = gapi.client.getToken().access_token;
-      const fileRes = await fetch('https://www.googleapis.com/drive/v3/files/' + driveFileId + '?alt=media&t=' + Date.now(), {
-        headers: { 'Authorization': 'Bearer ' + token },
-        cache: 'no-store'
+      // FIX: Use native gapi client for download to bypass CORS caching traps
+      const fileRes = await gapi.client.request({
+          path: '/drive/v3/files/' + driveFileId,
+          method: 'GET',
+          params: { alt: 'media', t: Date.now() }
       });
+
+      let data = fileRes.result;
+      if (typeof data === 'string') {
+          try { data = JSON.parse(data); } catch(e){}
+      }
       
-      const data = await fileRes.json();
-      Object.assign(S, data);
+      S = { ...S, ...data };
       persistLocal();
       toast('Data loaded securely from Drive!');
       markSynced();
       renderAll();
+    } else {
+      toast('No cloud save found.');
     }
-  } catch (err) { console.error(err); toast('Sync error'); }
+  } catch (err) { console.error('Drive load failed', err); toast('Sync error'); }
 }
 
 async function saveToDrive() {
@@ -653,9 +661,6 @@ async function saveToDrive() {
   toast('Saving to Cloud...');
 
   try {
-    const token = gapi.client.getToken().access_token;
-    const fileContent = JSON.stringify(S);
-
     if (!driveFileId) {
       const res = await gapi.client.drive.files.list({
         q: "name='triumph_speed400_data.json' and trashed=false",
@@ -663,32 +668,31 @@ async function saveToDrive() {
       });
       if (res.result.files && res.result.files.length > 0) {
         driveFileId = res.result.files[0].id;
-      } else {
-        // FIX 2a: Two-step upload. Create metadata first to get a valid File ID.
-        const metaRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-          method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'triumph_speed400_data.json', mimeType: 'application/json' })
-        });
-        const metaData = await metaRes.json();
-        driveFileId = metaData.id;
       }
     }
 
-    // FIX 2b: Push the actual JSON content directly using uploadType=media to bypass the form-data bug
-    const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files/' + driveFileId + '?uploadType=media', {
-      method: 'PATCH',
-      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: fileContent
+    const fileContent = JSON.stringify(S);
+
+    // FIX: Two-step native GAPI process guarantees the file is strictly overwritten without triggering browser blocks
+    if (!driveFileId) {
+        const res = await gapi.client.drive.files.create({
+            resource: { name: 'triumph_speed400_data.json', mimeType: 'application/json' },
+            fields: 'id'
+        });
+        driveFileId = res.result.id;
+    }
+
+    await gapi.client.request({
+        path: '/upload/drive/v3/files/' + driveFileId,
+        method: 'PATCH',
+        params: { uploadType: 'media' },
+        body: fileContent
     });
 
-    if (!uploadRes.ok) throw new Error('Upload payload rejected by Drive');
-    
     markSynced();
     toast('Cloud Sync Complete!');
   } catch (err) { console.error('Drive save failed', err); toast('Save failed'); }
 }
-
 function persistLocal() {
   localStorage.setItem('triumph_data', JSON.stringify(S));
   localStorage.setItem('triumph_unsaved', 'true'); // Locks the unsaved flag in memory
